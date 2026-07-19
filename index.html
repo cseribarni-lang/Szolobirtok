@@ -292,21 +292,24 @@ table.sz-table th:first-child,table.sz-table td:first-child{text-align:left}
   <div class="sz-card" id="sz-report-card" style="display:none">
     <p class="sz-h">Riport – terület x fajta</p>
     <table class="sz-table" id="sz-report-table"></table>
-    <p class="sz-h" style="margin-top:18px;font-size:15px">Termésátlag (kg / tőke)</p>
+    <p class="sz-h" style="margin-top:18px;font-size:15px">Termésátlag (kg / tőke) – terület szinten</p>
     <div id="sz-avg-bars"></div>
+    <p class="sz-h" style="margin-top:18px;font-size:15px">Termésátlag (kg / tőke) – fajtánként</p>
+    <div id="sz-avg-bars-fajta"></div>
   </div>
 </div>
 
 <script>
 const SZ_TERULETEK = [
-  {id:"t1",nev:"Tényő",ha:3.0528,toke:19080,fajtak:["Pinot blanc","Sauvignon blanc","Rajnai rizling","Merlot","Cabernet Franc"]},
-  {id:"t2",nev:"Szemere",ha:3.27888,toke:20493,fajtak:["Cabernet Franc","Merlot","Tramini","Rajnai rizling","Sauvignon blanc"]},
-  {id:"t3",nev:"Baráti",ha:2.81984,toke:17624,fajtak:["Rajnai rizling","Pinot blanc","Cabernet franc","Merlot","Kékfrankos"]},
-  {id:"t4",nev:"Pázmánd",ha:.43968,toke:2748,fajtak:["Rajnai rizling"]},
-  {id:"t5",nev:"Czurda",ha:1.3608,toke:5410,fajtak:["Rajnai rizling","Merlot","Cabernet Sauvignon"]},
-  {id:"v1",nev:"Vásárolt – Kreitli",ha:null,toke:null,fajtak:["Irsai"],vasarolt:true},
-  {id:"v2",nev:"Vásárolt – Oláh",ha:null,toke:null,fajtak:["Irsai"],vasarolt:true}
+  {id:"t1",nev:"Tényő",ha:3.0528,toke:19074,fajtaToke:{"Rajnai rizling":4732,"Sauvignon blanc":2520,"Merlot":6865,"Cabernet Franc":1782,"Pinot blanc":3175}},
+  {id:"t2",nev:"Szemere",ha:3.27888,toke:20493,fajtaToke:{"Cabernet Franc":2010,"Merlot":5025,"Tramini":4839,"Rajnai rizling":6306,"Sauvignon blanc":2313}},
+  {id:"t3",nev:"Baráti",ha:2.81984,toke:17624,fajtaToke:{"Rajnai rizling":5189,"Pinot blanc":3069,"Cabernet franc":3276,"Merlot":3257,"Kékfrankos":2833}},
+  {id:"t4",nev:"Pázmánd",ha:.43968,toke:2748,fajtaToke:{"Rajnai rizling":2748}},
+  {id:"t5",nev:"Czurda",ha:1.3608,toke:5410,fajtaToke:{"Rajnai rizling":5410}},
+  {id:"v1",nev:"Vásárolt – Kreitli",ha:null,toke:null,fajtaToke:{"Irsai":null},vasarolt:true},
+  {id:"v2",nev:"Vásárolt – Oláh",ha:null,toke:null,fajtaToke:{"Irsai":null},vasarolt:true}
 ];
+SZ_TERULETEK.forEach(t=>{ t.fajtak = Object.keys(t.fajtaToke); });
 const SZ_KEY = 'szuret_tetelek';
 let szTetelek = [];
 
@@ -1010,6 +1013,23 @@ function szRenderFull(){
     document.getElementById('sz-avg-bars').innerHTML = avgs.map(a=>
       `<div class="sz-bar-row"><span class="sz-bar-label">${a.nev}</span><div class="sz-bar-track"><div class="sz-bar-fill" style="width:${(a.avg/maxAvg*100).toFixed(0)}%"></div></div><span class="sz-bar-val">${a.avg.toFixed(2)}</span></div>`
     ).join('');
+
+    const fajtaAvgs = [];
+    ownAreas.forEach(t=>{
+      Object.keys(t.fajtaToke||{}).forEach(f=>{
+        const tokeSzam = t.fajtaToke[f];
+        if(!tokeSzam) return;
+        const sum = szTetelek.filter(e=>e.teruletId===t.id && e.fajta===f).reduce((s,e)=>s+e.netto,0);
+        if(sum>0) fajtaAvgs.push({nev:`${t.nev} – ${f}`, avg: sum/tokeSzam});
+      });
+    });
+    const maxFajtaAvg = Math.max(0.01, ...fajtaAvgs.map(a=>a.avg));
+    const fajtaBarsEl = document.getElementById('sz-avg-bars-fajta');
+    if(fajtaBarsEl){
+      fajtaBarsEl.innerHTML = fajtaAvgs.length ? fajtaAvgs.map(a=>
+        `<div class="sz-bar-row"><span class="sz-bar-label">${a.nev}</span><div class="sz-bar-track"><div class="sz-bar-fill" style="width:${(a.avg/maxFajtaAvg*100).toFixed(0)}%"></div></div><span class="sz-bar-val">${a.avg.toFixed(2)}</span></div>`
+      ).join('') : '<p style="color:#999;font-size:13px;margin:0">Még nincs elég adat fajtánkénti bontáshoz.</p>';
+    }
   }
   szRenderBridge();
 }
