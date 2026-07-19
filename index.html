@@ -297,19 +297,57 @@ table.sz-table th:first-child,table.sz-table td:first-child{text-align:left}
     <p class="sz-h" style="margin-top:18px;font-size:15px">Termésátlag (kg / tőke) – fajtánként</p>
     <div id="sz-avg-bars-fajta"></div>
   </div>
+
+  <div class="sz-card" id="szt-card" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <p class="sz-h" style="margin:0">Területek kezelése</p>
+      <button type="button" class="sz-btn" style="width:auto;padding:7px 14px;font-size:12.5px" onclick="sztUjTeruletForma()">+ Új terület</button>
+    </div>
+    <div id="szt-lista"></div>
+    <div id="szt-uj-forma"></div>
+  </div>
 </div>
 
 <script>
-const SZ_TERULETEK = [
-  {id:"t1",nev:"Tényő",ha:3.0528,toke:19074,fajtaToke:{"Rajnai rizling":4732,"Sauvignon blanc":2520,"Merlot":6865,"Cabernet Franc":1782,"Pinot blanc":3175}},
-  {id:"t2",nev:"Szemere",ha:3.27888,toke:20493,fajtaToke:{"Cabernet Franc":2010,"Merlot":5025,"Tramini":4839,"Rajnai rizling":6306,"Sauvignon blanc":2313}},
-  {id:"t3",nev:"Baráti",ha:2.81984,toke:17624,fajtaToke:{"Rajnai rizling":5189,"Pinot blanc":3069,"Cabernet franc":3276,"Merlot":3257,"Kékfrankos":2833}},
-  {id:"t4",nev:"Pázmánd",ha:.43968,toke:2748,fajtaToke:{"Rajnai rizling":2748}},
-  {id:"t5",nev:"Czurda",ha:1.3608,toke:5410,fajtaToke:{"Rajnai rizling":5410}},
-  {id:"v1",nev:"Vásárolt – Kreitli",ha:null,toke:null,fajtaToke:{"Irsai":null},vasarolt:true},
-  {id:"v2",nev:"Vásárolt – Oláh",ha:null,toke:null,fajtaToke:{"Irsai":null},vasarolt:true}
+const SZ_VASAROLT_TERULETEK = [
+  {id:"v1",nev:"Vásárolt – Kreitli",ha:null,toke:null,fajtaToke:{"Irsai":null},fajtak:["Irsai"],vasarolt:true},
+  {id:"v2",nev:"Vásárolt – Oláh",ha:null,toke:null,fajtaToke:{"Irsai":null},fajtak:["Irsai"],vasarolt:true}
 ];
-SZ_TERULETEK.forEach(t=>{ t.fajtak = Object.keys(t.fajtaToke); });
+const SZ_TERULETEK_DEFAULT = [
+  {id:"t1",nev:"Tényő",ha:3.0528,fajtaToke:{"Rajnai rizling":4732,"Sauvignon blanc":2520,"Merlot":6865,"Cabernet Franc":1782,"Pinot blanc":3175}},
+  {id:"t2",nev:"Szemere",ha:3.27888,fajtaToke:{"Cabernet Franc":2010,"Merlot":5025,"Tramini":4839,"Rajnai rizling":6306,"Sauvignon blanc":2313}},
+  {id:"t3",nev:"Baráti",ha:2.81984,fajtaToke:{"Rajnai rizling":5189,"Pinot blanc":3069,"Cabernet franc":3276,"Merlot":3257,"Kékfrankos":2833}},
+  {id:"t4",nev:"Pázmánd",ha:.43968,fajtaToke:{"Rajnai rizling":2748}},
+  {id:"t5",nev:"Czurda",ha:1.3608,fajtaToke:{"Rajnai rizling":5410}}
+];
+const SZT_KEY = 'teruletek'; // közös kulcs a Munka füllel (kézi/gépi munka Ft/ha, Ft/db számításai is ezt olvassák)
+let SZ_TERULETEK_OWN = SZ_TERULETEK_DEFAULT.map(t=>({...t}));
+let SZ_TERULETEK = [...SZ_TERULETEK_OWN, ...SZ_VASAROLT_TERULETEK];
+
+function sztTokeOssz(t){
+  return Object.values(t.fajtaToke||{}).reduce((s,v)=>s+(v||0),0);
+}
+function sztSync(){
+  SZ_TERULETEK_OWN.forEach(t=>{ t.fajtak = Object.keys(t.fajtaToke||{}); t.toke = sztTokeOssz(t); });
+  SZ_TERULETEK = [...SZ_TERULETEK_OWN, ...SZ_VASAROLT_TERULETEK];
+}
+async function sztLoad(){
+  let list = null;
+  try{
+    const r = await storage.get(SZT_KEY);
+    list = (r && r.value) ? JSON.parse(r.value) : null;
+  }catch(e){ list = null; }
+  if(!list || !list.length){
+    list = SZ_TERULETEK_DEFAULT.map(t=>({...t}));
+    try{ await storage.set(SZT_KEY, JSON.stringify(list)); }catch(e){}
+  }
+  SZ_TERULETEK_OWN = list;
+  sztSync();
+}
+async function sztPersist(){
+  sztSync();
+  await storage.set(SZT_KEY, JSON.stringify(SZ_TERULETEK_OWN));
+}
 const SZ_KEY = 'szuret_tetelek';
 let szTetelek = [];
 
@@ -429,6 +467,7 @@ window.addEventListener('sb-remote', (e)=>{
   }
 });
 (async function szInit(){
+  await sztLoad();
   szFillTeruletSelect();
   document.getElementById('sz-datum').value = new Date().toISOString().slice(0,10);
   document.getElementById('sz-konteiner').value = 1;
@@ -973,6 +1012,8 @@ function szRenderFull(){
   const canViewSzuret = !!(canEditSzuret||j.megtekint);
   const entryCard = document.getElementById('sz-entry-card');
   if(entryCard) entryCard.style.display = canEditSzuret ? '' : 'none';
+  const sztCard = document.getElementById('szt-card');
+  if(sztCard){ sztCard.style.display = canEditSzuret ? '' : 'none'; if(canEditSzuret) sztRender(); }
   const entriesEl = document.getElementById('sz-entries');
   if(todays.length===0){
     entriesEl.innerHTML = '<p style="color:#999;font-size:13px;margin:0">Még nincs rögzített tétel ma.</p>';
@@ -1034,6 +1075,146 @@ function szRenderFull(){
   szRenderBridge();
 }
 window.szRender = szRenderFull;
+
+// ---------- Területek kezelése ----------
+function sztRender(){
+  const el = document.getElementById('szt-lista');
+  if(!el) return;
+  el.innerHTML = SZ_TERULETEK_OWN.map(t => {
+    const fajtaRows = Object.entries(t.fajtaToke||{}).map(([f,cnt])=>`
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+        <input type="text" value="${f.replace(/"/g,'&quot;')}" data-terulet="${t.id}" data-fajta-old="${f.replace(/"/g,'&quot;')}" onchange="sztFajtaNevValtozott(this)" style="flex:1;padding:5px 7px;border:1px solid #ddd;border-radius:5px;font-size:12.5px">
+        <input type="number" value="${cnt==null?'':cnt}" data-terulet="${t.id}" data-fajta="${f.replace(/"/g,'&quot;')}" onchange="sztFajtaSzamValtozott(this)" placeholder="tőkeszám" style="width:100px;padding:5px 7px;border:1px solid #ddd;border-radius:5px;font-size:12.5px">
+        <span onclick="sztFajtaTorles('${t.id}','${f.replace(/'/g,"\\'")}')" style="cursor:pointer;color:#999;padding:0 4px;font-size:14px">×</span>
+      </div>
+    `).join('');
+    return `
+      <div style="border:1px solid #ddd;border-radius:8px;padding:12px 14px;margin-bottom:10px">
+        <div style="display:flex;gap:8px;margin-bottom:6px">
+          <input type="text" value="${t.nev.replace(/"/g,'&quot;')}" data-terulet="${t.id}" onchange="sztNevValtozott(this)" style="flex:1;padding:6px 8px;border:1px solid #ddd;border-radius:5px;font-weight:700;font-size:13.5px">
+          <input type="number" step="0.0001" value="${t.ha==null?'':t.ha}" data-terulet="${t.id}" onchange="sztHaValtozott(this)" placeholder="ha" style="width:90px;padding:6px 8px;border:1px solid #ddd;border-radius:5px;font-size:12.5px">
+          <span onclick="sztTeruletTorles('${t.id}')" style="cursor:pointer;color:#999;padding:4px 6px;align-self:center">🗑</span>
+        </div>
+        <div style="font-size:11px;color:#999;margin-bottom:6px">Összes tőke: ${sztTokeOssz(t).toLocaleString('hu-HU')} db</div>
+        ${fajtaRows}
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <input type="text" id="szt-uj-fajta-nev-${t.id}" placeholder="Új fajta neve…" style="flex:1;padding:5px 7px;border:1px solid #ddd;border-radius:5px;font-size:12.5px">
+          <input type="number" id="szt-uj-fajta-szam-${t.id}" placeholder="Tőkeszám" style="width:100px;padding:5px 7px;border:1px solid #ddd;border-radius:5px;font-size:12.5px">
+          <button type="button" onclick="sztFajtaHozzaad('${t.id}')" style="font-size:12px;padding:5px 10px;border:1px solid #ddd;border-radius:5px;background:#fff;cursor:pointer">+ Fajta</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+async function sztNevValtozott(input){
+  const t = SZ_TERULETEK_OWN.find(x=>x.id===input.dataset.terulet);
+  if(t){ t.nev = input.value; await sztPersist(); szFillTeruletSelect(); szRenderFull(); }
+}
+async function sztHaValtozott(input){
+  const t = SZ_TERULETEK_OWN.find(x=>x.id===input.dataset.terulet);
+  if(t){ t.ha = input.value===''? null : parseFloat(input.value); await sztPersist(); sztRender(); }
+}
+async function sztFajtaNevValtozott(input){
+  const t = SZ_TERULETEK_OWN.find(x=>x.id===input.dataset.terulet);
+  const oldF = input.dataset.fajtaOld;
+  const newF = input.value.trim();
+  if(t && newF && newF!==oldF){
+    const val = t.fajtaToke[oldF];
+    delete t.fajtaToke[oldF];
+    t.fajtaToke[newF] = val;
+    await sztPersist();
+    szFillTeruletSelect();
+    sztRender();
+  }
+}
+async function sztFajtaSzamValtozott(input){
+  const t = SZ_TERULETEK_OWN.find(x=>x.id===input.dataset.terulet);
+  const f = input.dataset.fajta;
+  if(t){ t.fajtaToke[f] = input.value===''? null : parseFloat(input.value); await sztPersist(); sztRender(); szRenderFull(); }
+}
+async function sztFajtaTorles(teruletId, fajta){
+  const t = SZ_TERULETEK_OWN.find(x=>x.id===teruletId);
+  if(t && confirm(`Törlöd a(z) "${fajta}" fajtát?`)){
+    delete t.fajtaToke[fajta];
+    await sztPersist();
+    szFillTeruletSelect();
+    sztRender();
+    szRenderFull();
+  }
+}
+async function sztFajtaHozzaad(teruletId){
+  const nevEl = document.getElementById('szt-uj-fajta-nev-'+teruletId);
+  const szamEl = document.getElementById('szt-uj-fajta-szam-'+teruletId);
+  const nev = nevEl.value.trim();
+  if(!nev) return;
+  const t = SZ_TERULETEK_OWN.find(x=>x.id===teruletId);
+  if(t){
+    t.fajtaToke[nev] = szamEl.value===''? null : parseFloat(szamEl.value);
+    await sztPersist();
+    szFillTeruletSelect();
+    sztRender();
+  }
+}
+async function sztTeruletTorles(teruletId){
+  if(!confirm('Biztosan törlöd ezt a területet? A korábbi szüreti bejegyzések megmaradnak, de a legördülőből eltűnik.')) return;
+  SZ_TERULETEK_OWN = SZ_TERULETEK_OWN.filter(t=>t.id!==teruletId);
+  await sztPersist();
+  szFillTeruletSelect();
+  sztRender();
+  szRenderFull();
+}
+function sztUjTeruletForma(){
+  const el = document.getElementById('szt-uj-forma');
+  el.innerHTML = `
+    <div style="border:1px dashed #bbb;border-radius:8px;padding:14px;margin-top:8px">
+      <div style="font-weight:700;margin-bottom:8px;font-size:13.5px">Új terület</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input type="text" id="szt-uj-nev" placeholder="Terület neve" style="flex:1;padding:6px 8px;border:1px solid #ddd;border-radius:5px">
+        <input type="number" step="0.0001" id="szt-uj-ha" placeholder="ha" style="width:90px;padding:6px 8px;border:1px solid #ddd;border-radius:5px">
+      </div>
+      <div style="font-size:11px;color:#999;margin-bottom:6px">Fajták és tőkeszámok:</div>
+      <div id="szt-uj-fajta-sorok">
+        <div class="szt-uj-fajta-sor" style="display:flex;gap:6px;margin-bottom:4px">
+          <input type="text" class="szt-uj-fn" placeholder="Fajta neve" style="flex:1;padding:5px 7px;border:1px solid #ddd;border-radius:5px">
+          <input type="number" class="szt-uj-fs" placeholder="Tőkeszám" style="width:100px;padding:5px 7px;border:1px solid #ddd;border-radius:5px">
+        </div>
+      </div>
+      <button type="button" onclick="sztUjFajtaSorHozzaad()" style="font-size:12px;padding:5px 10px;border:1px solid #ddd;border-radius:5px;background:#fff;cursor:pointer;margin-bottom:10px">+ Fajta sor</button>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="sz-btn" style="width:auto;padding:8px 16px" onclick="sztUjTeruletMentes()">Létrehozás</button>
+        <button type="button" onclick="document.getElementById('szt-uj-forma').innerHTML=''" style="padding:8px 16px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer">Mégse</button>
+      </div>
+    </div>
+  `;
+}
+function sztUjFajtaSorHozzaad(){
+  const wrap = document.getElementById('szt-uj-fajta-sorok');
+  const div = document.createElement('div');
+  div.className = 'szt-uj-fajta-sor';
+  div.style.cssText = 'display:flex;gap:6px;margin-bottom:4px';
+  div.innerHTML = `<input type="text" class="szt-uj-fn" placeholder="Fajta neve" style="flex:1;padding:5px 7px;border:1px solid #ddd;border-radius:5px">
+    <input type="number" class="szt-uj-fs" placeholder="Tőkeszám" style="width:100px;padding:5px 7px;border:1px solid #ddd;border-radius:5px">`;
+  wrap.appendChild(div);
+}
+async function sztUjTeruletMentes(){
+  const nevEl = document.getElementById('szt-uj-nev');
+  const nev = nevEl.value.trim();
+  if(!nev) return;
+  const ha = document.getElementById('szt-uj-ha').value;
+  const fajtaToke = {};
+  document.querySelectorAll('.szt-uj-fajta-sor').forEach(row=>{
+    const fn = row.querySelector('.szt-uj-fn').value.trim();
+    const fs = row.querySelector('.szt-uj-fs').value;
+    if(fn) fajtaToke[fn] = fs===''? null : parseFloat(fs);
+  });
+  const newT = { id: 't'+Date.now(), nev, ha: ha===''?null:parseFloat(ha), fajtaToke };
+  SZ_TERULETEK_OWN.push(newT);
+  await sztPersist();
+  szFillTeruletSelect();
+  sztRender();
+  szRenderFull();
+  document.getElementById('szt-uj-forma').innerHTML = '';
+}
 </script>
 
 </body>
