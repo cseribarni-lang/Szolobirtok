@@ -328,7 +328,16 @@ function sztTokeOssz(t){
   return Object.values(t.fajtaToke||{}).reduce((s,v)=>s+(v||0),0);
 }
 function sztSync(){
-  SZ_TERULETEK_OWN.forEach(t=>{ t.fajtak = Object.keys(t.fajtaToke||{}); t.toke = sztTokeOssz(t); });
+  SZ_TERULETEK_OWN.forEach(t=>{
+    if(!t.fajtaToke || typeof t.fajtaToke!=='object') t.fajtaToke = {};
+    const fajtaTokeKulcsok = Object.keys(t.fajtaToke);
+    // ha van fajtánkénti bontásunk, abból vesszük a fajta-listát; ha nincs (pl. a Munka fülön létrehozott terület), a meglévő listát őrizzük meg üres tömb helyett
+    if(fajtaTokeKulcsok.length>0) t.fajtak = fajtaTokeKulcsok;
+    else if(!Array.isArray(t.fajtak)) t.fajtak = [];
+    const osszeg = sztTokeOssz(t);
+    t.toke = osszeg>0 ? osszeg : (Number(t.toke)||0);
+    if(typeof t.ha==='undefined') t.ha = null;
+  });
   SZ_TERULETEK = [...SZ_TERULETEK_OWN, ...SZ_VASAROLT_TERULETEK];
 }
 async function sztLoad(){
@@ -339,10 +348,18 @@ async function sztLoad(){
   }catch(e){ list = null; }
   if(!list || !list.length){
     list = SZ_TERULETEK_DEFAULT.map(t=>({...t}));
-    try{ await storage.set(SZT_KEY, JSON.stringify(list)); }catch(e){}
+    SZ_TERULETEK_OWN = list;
+    sztSync();
+    try{ await storage.set(SZT_KEY, JSON.stringify(SZ_TERULETEK_OWN)); }catch(e){}
+    return;
   }
+  // hibás/hiányos mentett rekordok (pl. hiányzó fajtak tömb) javítása, és visszamentése, hogy a Munka fül se akadjon el rajta
+  const javitasKell = list.some(t=>!Array.isArray(t.fajtak) || typeof t.ha==='undefined');
   SZ_TERULETEK_OWN = list;
   sztSync();
+  if(javitasKell){
+    try{ await storage.set(SZT_KEY, JSON.stringify(SZ_TERULETEK_OWN)); }catch(e){}
+  }
 }
 async function sztPersist(){
   sztSync();
