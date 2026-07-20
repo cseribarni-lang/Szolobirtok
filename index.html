@@ -861,6 +861,8 @@ function fhUpdateTabVisibility(){
   if(munkaTab) munkaTab.style.display = canMunka ? '' : 'none';
   if(szTab) szTab.style.display = canSzuret ? '' : 'none';
   if(pkTab) pkTab.style.display = canBorasz ? '' : 'none';
+  const rfTab = document.getElementById('sz-tab-reife');
+  if(rfTab) rfTab.style.display = canSzuret ? '' : 'none';
   // ha a Munka fül el van rejtve, ne induljon rajta a nézet
   if(!canMunka && canSzuret){ szSwitchTab('szuret'); }
   else if(!canMunka && canBorasz){ szSwitchTab('pincekonyv'); }
@@ -1446,9 +1448,7 @@ function rfInit(){
 
 const rfTab = document.getElementById('sz-tab-reife');
 if(rfTab){
-  const j = window.__jogok||{};
-  const canSzuretRf = j.szolo||j.borasz||j.teljes||j.admin||j.megtekint;
-  rfTab.style.display = canSzuretRf ? '' : 'none';
+  rfTab.style.display = 'none';
 }
 
 const _szSwitchTabForReife = window.szSwitchTab;
