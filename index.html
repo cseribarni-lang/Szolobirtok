@@ -1318,7 +1318,7 @@ function rfBrixFromSg(sg){ return 143.254*Math.pow(sg,3) - 648.670*Math.pow(sg,2
 function rfSgFromBrix(brix){ return 0.00000005785037196*Math.pow(brix,3) + 0.00001261831344*Math.pow(brix,2) + 0.003873042366*brix + 0.9999994636; }
 function rfOechsleFromKmw(kmw){ return kmw*(0.022*kmw + 4.54); }
 function rfKmwFromOechsle(oe){ return (-4.54 + Math.sqrt(4.54*4.54 + 4*0.022*oe)) / (2*0.022); }
-function rfZuckerGL(brix, sg){ return brix * sg * 10; }
+function rfZuckerGL(oe){ return oe * 2.3; }
 
 function rfCalc(quelle){
   const oeEl = document.getElementById('rf-oechsle');
@@ -1349,7 +1349,7 @@ function rfCalc(quelle){
   oeEl.value = oe.toFixed(1);
   kmwEl.value = kmw.toFixed(1);
   brixEl.value = brix.toFixed(1);
-  const zucker = rfZuckerGL(brix, sg);
+  const zucker = rfZuckerGL(oe);
   anzeige.textContent = `≈ ${Math.round(zucker)} g/l cukor (becsült)`;
 }
 
@@ -1408,9 +1408,9 @@ async function rfSave(){
     return;
   }
   let zucker = null;
-  if(oe){ zucker = rfZuckerGL(rfBrixFromSg(rfSgFromOechsle(parseFloat(oe))), rfSgFromOechsle(parseFloat(oe))); }
-  else if(kmw){ const o=rfOechsleFromKmw(parseFloat(kmw)); zucker = rfZuckerGL(rfBrixFromSg(rfSgFromOechsle(o)), rfSgFromOechsle(o)); }
-  else if(brix){ zucker = rfZuckerGL(parseFloat(brix), rfSgFromBrix(parseFloat(brix))); }
+  if(oe){ zucker = rfZuckerGL(parseFloat(oe)); }
+  else if(kmw){ zucker = rfZuckerGL(rfOechsleFromKmw(parseFloat(kmw))); }
+  else if(brix){ zucker = rfZuckerGL(rfOechsleFromSg(rfSgFromBrix(parseFloat(brix)))); }
 
   btn.disabled = true; btn.textContent = 'Mentés…';
   try{
