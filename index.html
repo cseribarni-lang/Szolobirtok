@@ -1308,6 +1308,7 @@ const RF_SB_URL='https://cjbpsvgomsdxaewsassl.supabase.co';
 const RF_SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqYnBzdmdvbXNkeGFld3Nhc3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2Mjc5MDYsImV4cCI6MjA5NzIwMzkwNn0.iZZoFikaAW072CSZ3kaCRf7T_s3k94naM2ywDpg7ujk';
 const RF_SB_H={'apikey':RF_SB_KEY,'Authorization':'Bearer '+RF_SB_KEY,'Content-Type':'application/json'};
 let rfMessungen = [];
+let rfEditingId = null;
 
 // ---------- Átváltási képletek (Oechsle / MM° (KMW) / Brix) ----------
 // Forrás: az Oechsle definíció szerint (SG-1)*1000. Brix<->SG szabványos polinom-illesztéssel (ICUMSA-közeli).
@@ -1390,8 +1391,67 @@ function rfRenderList(){
         ${m.osszsav!=null? 'Sav: '+m.osszsav+' g/l':''}${m.osszsav!=null && m.ph!=null? ' · ':''}${m.ph!=null? 'pH: '+m.ph:''}
       </div>
       ${m.megjegyzes? `<div style="font-size:11.5px;color:#999;margin-top:2px">${m.megjegyzes}</div>`:''}
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button onclick="rfStartEdit('${m.id}')" style="font-size:11.5px;padding:5px 10px;border:1px solid #ddd;border-radius:7px;background:#fff;cursor:pointer">✏️ Szerkesztés</button>
+        <button onclick="rfDelete('${m.id}')" style="font-size:11.5px;padding:5px 10px;border:1px solid #e0b0a8;border-radius:7px;background:#fff;color:#8B2500;cursor:pointer">🗑 Törlés</button>
+      </div>
     </div>
   `).join('');
+}
+
+function rfStartEdit(id){
+  const m = rfMessungen.find(x=>x.id===id);
+  if(!m) return;
+  rfEditingId = id;
+  document.getElementById('rf-datum').value = m.datum;
+  const tMatch = SZ_TERULETEK.find(x=>x.nev===m.terulet);
+  if(tMatch){ document.getElementById('rf-terulet').value = tMatch.id; rfOnTeruletChange(); }
+  document.getElementById('rf-fajta').value = m.fajta;
+  document.getElementById('rf-oechsle').value = m.oechslegrad!=null? m.oechslegrad: '';
+  document.getElementById('rf-kmw').value = m.mm_fok!=null? m.mm_fok: '';
+  document.getElementById('rf-brix').value = m.brix!=null? m.brix: '';
+  document.getElementById('rf-zucker-anzeige').textContent = m.cukor_gl!=null? `≈ ${Math.round(m.cukor_gl)} g/l cukor (becsült)`: '';
+  document.getElementById('rf-saeure').value = m.osszsav!=null? m.osszsav: '';
+  document.getElementById('rf-ph').value = m.ph!=null? m.ph: '';
+  document.getElementById('rf-megjegyzes').value = m.megjegyzes || '';
+  const btn = document.getElementById('rf-save-btn');
+  btn.textContent = '✓ Módosítás mentése';
+  let cancelBtn = document.getElementById('rf-cancel-edit-btn');
+  if(!cancelBtn){
+    cancelBtn = document.createElement('button');
+    cancelBtn.id = 'rf-cancel-edit-btn';
+    cancelBtn.textContent = 'Szerkesztés megszakítása';
+    cancelBtn.onclick = rfCancelEdit;
+    cancelBtn.style.cssText = 'width:100%;margin-top:8px;padding:9px 0;background:none;border:1px solid #ddd;border-radius:8px;color:#666;cursor:pointer';
+    btn.parentNode.insertBefore(cancelBtn, btn.nextSibling);
+  }
+  btn.scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function rfCancelEdit(){
+  rfEditingId = null;
+  document.getElementById('rf-oechsle').value = '';
+  document.getElementById('rf-kmw').value = '';
+  document.getElementById('rf-brix').value = '';
+  document.getElementById('rf-zucker-anzeige').textContent = '';
+  document.getElementById('rf-saeure').value = '';
+  document.getElementById('rf-ph').value = '';
+  document.getElementById('rf-megjegyzes').value = '';
+  document.getElementById('rf-save-btn').textContent = 'Mérés mentése';
+  const cancelBtn = document.getElementById('rf-cancel-edit-btn');
+  if(cancelBtn) cancelBtn.remove();
+}
+
+async function rfDelete(id){
+  if(!confirm('Biztosan törlöd ezt a mérést?')) return;
+  try{
+    const r = await fetch(RF_SB_URL+'/rest/v1/mintavetel?id=eq.'+id, {method:'DELETE', headers: RF_SB_H, signal: AbortSignal.timeout(8000)});
+    if(!r.ok) throw new Error('Törlés sikertelen ('+r.status+')');
+    if(rfEditingId===id) rfCancelEdit();
+    await rfLoad();
+  }catch(e){
+    alert('Hiba törlés közben: '+e.message);
+  }
 }
 
 async function rfSave(){
@@ -1424,7 +1484,10 @@ async function rfSave(){
       ph: document.getElementById('rf-ph').value? parseFloat(document.getElementById('rf-ph').value): null,
       megjegyzes: document.getElementById('rf-megjegyzes').value || null
     };
-    const r = await fetch(RF_SB_URL+'/rest/v1/mintavetel', {method:'POST', headers: {...RF_SB_H, 'Prefer':'return=minimal'}, body: JSON.stringify(body), signal: AbortSignal.timeout(8000)});
+    const szerkesztVe = !!rfEditingId;
+    const url = szerkesztVe ? RF_SB_URL+'/rest/v1/mintavetel?id=eq.'+rfEditingId : RF_SB_URL+'/rest/v1/mintavetel';
+    const method = szerkesztVe ? 'PATCH' : 'POST';
+    const r = await fetch(url, {method, headers: {...RF_SB_H, 'Prefer':'return=minimal'}, body: JSON.stringify(body), signal: AbortSignal.timeout(8000)});
     if(!r.ok){
       let reszlet = '';
       try{ const hiba = await r.json(); reszlet = hiba.message || hiba.hint || JSON.stringify(hiba); }catch(_){ try{ reszlet = await r.text(); }catch(__){} }
@@ -1437,11 +1500,12 @@ async function rfSave(){
     document.getElementById('rf-saeure').value = '';
     document.getElementById('rf-ph').value = '';
     document.getElementById('rf-megjegyzes').value = '';
+    if(szerkesztVe) rfCancelEdit();
     await rfLoad();
   }catch(e){
     alert('Hiba mentés közben: '+e.message);
   }
-  btn.disabled = false; btn.textContent = 'Mérés mentése';
+  btn.disabled = false; btn.textContent = rfEditingId ? '✓ Módosítás mentése' : 'Mérés mentése';
 }
 
 function rfInit(){
